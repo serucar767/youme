@@ -1,0 +1,480 @@
+<!DOCTYPE html>
+<html lang="ja">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ゆめタウンスタンプラリー</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+
+    <style>
+        :root {
+            --aeon-magenta: #C60079;
+            /*テーマカラーは作るものによって変更*/
+        }
+
+        body {
+            font-family: sans-serif;
+            background: #f0f0f0;
+            margin: 0;
+            padding: 20px;
+        }
+
+        /* 画像保存の対象エリア全体 */
+        #captureArea {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            max-width: 900px;
+            margin: 0 auto;
+        }
+
+        /* ヘッダー：タイトルと円グラフを横に並べる */
+        .stats-header {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 30px;
+            padding: 10px 0;
+            border-bottom: 2px solid var(--aeon-magenta);
+            margin-bottom: 20px;
+        }
+
+        .stats-header h1 {
+            margin: 0;
+            font-size: 20px;
+            line-height: 1.2;
+            color: var(--aeon-magenta);
+            letter-spacing: 1px;
+        }
+
+        /* ミニ円グラフ */
+        .chart-container-mini {
+            width: 85px;
+            position: relative;
+        }
+
+        .circular-chart {
+            display: block;
+            width: 100%;
+        }
+
+        .circle-bg {
+            fill: none;
+            stroke: #eee;
+            stroke-width: 2.8;
+        }
+
+        .circle {
+            fill: none;
+            stroke: var(--aeon-magenta);
+            stroke-width: 2.8;
+            stroke-linecap: round;
+            transition: stroke-dasharray 0.5s ease;
+        }
+
+        .percentage {
+            fill: var(--aeon-magenta);
+            font-size: 6px;
+            text-anchor: middle;
+        }
+
+        .total-count-mini {
+            font-size: 11px;
+            color: #666;
+            text-align: center;
+            margin-top: -5px;
+            font-weight: bold;
+        }
+
+        /* 地方ごとの見出し（一行レイアウト） */
+        .region-header-row {
+            display: flex;
+            align-items: center;
+            justify-content: flex-start;
+            gap: 15px;
+            margin-bottom: 12px;
+            padding-bottom: 5px;
+            border-bottom: 1px solid #eee;
+        }
+
+        .region-title-text {
+            font-size: 14px;
+            font-weight: bold;
+            color: var(--aeon-magenta);
+            width: 80px;
+            flex-shrink: 0;
+            border-left: 4px solid var(--aeon-magenta);
+            padding-left: 8px;
+        }
+
+        .region-progress-container {
+            width: 100px;
+            height: 6px;
+            background: #eee;
+            border-radius: 3px;
+            overflow: hidden;
+        }
+
+        .region-progress-fill {
+            height: 100%;
+            background: var(--aeon-magenta);
+            transition: width 0.5s ease;
+        }
+
+        .region-stats-text {
+            font-size: 11px;
+            color: #666;
+            min-width: 90px;
+            text-align: right;
+        }
+
+        .region-section {
+            margin-bottom: 20px;
+        }
+
+        /* 店舗チップ */
+
+        .mall-chip {
+            font-size: 9px;
+            padding: 5px 1px;
+            background: #f9f9f9;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            cursor: pointer;
+            text-align: center;
+            transition: 0.2s;
+            color: #666;
+            height: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            word-break: break-word;
+            white-space: pre-wrap;
+        }
+
+        .sub-grid {
+            display: grid;
+            /* ★ スマホでは4列固定。画面幅が広がれば5列と増える設定 */
+            grid-template-columns: repeat(4, 1fr);
+            gap: 4px;
+            /* 隙間をさらに詰めて密度を上げる */
+        }
+
+        @media (min-width: 480px) {
+
+            /* 少し広いスマホやタブレットでは5列以上に */
+            .sub-grid {
+                grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
+            }
+        }
+
+        .mall-chip.visited {
+            background: var(--aeon-magenta);
+            color: white;
+            border-color: var(--aeon-magenta);
+            font-weight: bold;
+            box-shadow: 0 2px 4px rgba(174, 0, 107, 0.2);
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
+
+        .controls {
+            text-align: center;
+            margin: 30px 0;
+        }
+
+        .btn-save {
+            background: var(--aeon-magenta);
+            color: white;
+            border: none;
+            padding: 15px 40px;
+            border-radius: 50px;
+            cursor: pointer;
+            font-weight: bold;
+            font-size: 16px;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+        }
+
+        /* 地方ヘッダーをクリック可能にする */
+        .region-header-row {
+            cursor: pointer;
+            transition: background 0.2s;
+            border-radius: 4px;
+            padding: 5px;
+        }
+
+        .region-header-row:hover {
+            background: #fdf0f6;
+            /* 軽くホバー色をつける */
+        }
+
+        /* 閉じている時の設定 */
+        .region-section.collapsed .sub-grid {
+            display: none !important;
+        }
+
+        /* 開閉状態を示すアイコン（任意：地方名の横に矢印を出す） */
+        .region-title-text::after {
+            content: '  ▼';
+            font-size: 10px;
+            transition: transform 0.3s;
+            display: inline-block;
+            color: #666;
+        }
+
+        .region-section.collapsed .region-title-text::after {
+            transform: rotate(-90deg);
+            /* 閉じている時は横向き */
+        }
+    </style>
+</head>
+
+<body>
+
+    <div id="captureArea">
+        <div class="stats-header">
+            <h1>ゆめタウン<br>スタンプラリー</h1>
+            <div class="chart-container-mini">
+                <svg viewBox="0 0 36 36" class="circular-chart">
+                    <path class="circle-bg"
+                        d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
+                    <path id="circleFill" class="circle" stroke-dasharray="0, 100"
+                        d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
+                    <text x="18" y="20.35" class="percentage" id="percentDisplay">0.00%</text>
+                </svg>
+                <div class="total-count-mini" id="countDisplay">0 / 0</div>
+            </div>
+        </div>
+
+        <div id="mallGrid"></div>
+    </div>
+    <div class="controls">
+        <button class="btn-save" id="saveBtn">結果を画像で保存する</button>
+    </div>
+
+    <script>
+        // 1. 都道府県別の店舗データ（計69店舗）
+        const malls = [
+            { id: 1001, region: "兵庫県", name: "丹波" },
+            { id: 1002, region: "兵庫県", name: "姫路" },
+
+            { id: 2001, region: "岡山県", name: "井原" },
+            { id: 2002, region: "岡山県", name: "邑久" },
+            { id: 2003, region: "岡山県", name: "平島" },
+            { id: 2004, region: "岡山県", name: "高梁" },
+            { id: 2005, region: "岡山県", name: "久世" },
+            { id: 2006, region: "岡山県", name: "倉敷" },
+            { id: 2007, region: "岡山県", name: "ゆめモール赤磐" },
+
+            { id: 3001, region: "広島県", name: "LECT" },
+            { id: 3002, region: "広島県", name: "廿日市" },
+            { id: 3003, region: "広島県", name: "広島" },
+            { id: 3004, region: "広島県", name: "呉" },
+            { id: 3006, region: "広島県", name: "江田島" },
+            { id: 3007, region: "広島県", name: "大竹" },
+            { id: 3008, region: "広島県", name: "学園店" },
+            { id: 3009, region: "広島県", name: "ゆめテラス祇園" },
+            { id: 3010, region: "広島県", name: "黒瀬" },
+            { id: 3011, region: "広島県", name: "蔵王" },
+            { id: 3012, region: "広島県", name: "東広島" },
+            { id: 3013, region: "広島県", name: "福山" },
+            /* { id: 3014, region: "広島県", name: "松永" },閉店*/
+            { id: 3015, region: "広島県", name: "みゆき" },
+            { id: 3016, region: "広島県", name: "安古市" },
+            { id: 3017, region: "広島県", name: "吉田" },
+            { id: 3018, region: "広島県", name: "ゆめモール五日市" },
+            { id: 3019, region: "広島県", name: "ゆめモール西条" },
+
+            { id: 4001, region: "島根県", name: "浜田" },
+            { id: 4002, region: "島根県", name: "益田" },
+            { id: 4003, region: "島根県", name: "江津" },
+            { id: 4004, region: "島根県", name: "出雲" },
+            { id: 4005, region: "島根県", name: "斐川" },
+
+            { id: 5001, region: "山口県", name: "ゆめシティ" },
+            { id: 5002, region: "山口県", name: "山口" },
+            { id: 5003, region: "山口県", name: "防府" },
+            { id: 5004, region: "山口県", name: "下松" },
+            { id: 5005, region: "山口県", name: "新南陽" },
+            { id: 5006, region: "山口県", name: "徳山" },
+            { id: 5007, region: "山口県", name: "柳井" },
+            { id: 5008, region: "山口県", name: "南岩国" },
+            { id: 5009, region: "山口県", name: "宇部" },
+            { id: 5010, region: "山口県", name: "長府" },
+            { id: 5011, region: "山口県", name: "ゆめモール下関" },
+
+            { id: 6001, region: "徳島県", name: "徳島" },
+            { id: 7001, region: "香川県", name: "高松" },
+            { id: 7002, region: "香川県", name: "丸亀" },
+            { id: 7003, region: "香川県", name: "三豊" },
+
+            { id: 8001, region: "福岡県", name: "博多" },
+            { id: 8002, region: "福岡県", name: "筑紫野" },
+            { id: 8003, region: "福岡県", name: "久留米" },
+            { id: 8004, region: "福岡県", name: "八女" },
+            { id: 8005, region: "福岡県", name: "大牟田" },
+            { id: 8007, region: "福岡県", name: "遠賀" },
+            { id: 8008, region: "福岡県", name: "行橋" },
+            { id: 8009, region: "福岡県", name: "南行橋" },
+            { id: 8110, region: "福岡県", name: "飯塚" },
+            { id: 8111, region: "福岡県", name: "大川" },
+            { id: 8112, region: "福岡県", name: "ゆめモール柳川" },
+            { id: 8113, region: "福岡県", name: "ゆめモール筑後" },
+            { id: 8114, region: "福岡県", name: "ゆめモール那珂川" },
+
+            { id: 9001, region: "佐賀県", name: "佐賀" },
+            { id: 9002, region: "佐賀県", name: "武雄" },
+            { id: 9101, region: "長崎県", name: "夢彩都" },
+
+            { id: 9201, region: "熊本県", name: "光の森" },
+            { id: 9202, region: "熊本県", name: "はません" },
+            { id: 9203, region: "熊本県", name: "サンピアン" },
+            { id: 9204, region: "熊本県", name: "シティモール" },
+            { id: 9205, region: "熊本県", name: "八代" },
+            { id: 9206, region: "熊本県", name: "ゆめモール合志" },
+
+            { id: 9301, region: "大分県", name: "別府" },
+            { id: 9302, region: "大分県", name: "中津" }
+        ];
+
+        // 2. 表示する都道府県の順序
+        const regionOrder = ["兵庫県", "岡山県", "広島県", "島根県", "山口県", "徳島県", "香川県", "福岡県", "佐賀県", "長崎県", "熊本県", "大分県"];
+
+        let visitedIds = JSON.parse(localStorage.getItem('youme_data')) || [];
+
+        function updateStats() {
+            const total = malls.length;
+            const count = visitedIds.length;
+            const percent = total > 0 ? ((count / total) * 100).toFixed(2) : "0.00";
+
+            // メインの表示を更新
+            document.getElementById('countDisplay').textContent = `${count} / ${total}`;
+            document.getElementById('percentDisplay').textContent = `${percent}%`;
+
+            // 円グラフの塗りを更新
+            const circleEl = document.getElementById('circleFill');
+            if (circleEl) {
+                circleEl.setAttribute("stroke-dasharray", `${percent}, 100`);
+            }
+        }
+
+        function render() {
+            const gridContainer = document.getElementById('mallGrid');
+            gridContainer.innerHTML = "";
+
+            regionOrder.forEach(regionName => {
+                const regionMalls = malls.filter(m => m.region === regionName);
+                if (regionMalls.length === 0) return;
+
+                const visitedInRegion = regionMalls.filter(m => visitedIds.includes(m.id)).length;
+                const regionTotal = regionMalls.length;
+                const regionPercent = ((visitedInRegion / regionTotal) * 100).toFixed(2);
+
+                // セクションの作成
+                const section = document.createElement('div');
+                section.className = 'region-section';
+
+
+                // ヘッダー（地域名・バー・数値）の作成
+                section.innerHTML = `
+            <div class="region-header-row">
+                <span class="region-title-text">${regionName}</span>
+                <div class="region-progress-container">
+                    <div class="region-progress-fill" style="width: ${regionPercent}%"></div>
+                </div>
+                <span class="region-stats-text">
+                    ${regionPercent}% <small>(${visitedInRegion}/${regionTotal})</small>
+                </span>
+            </div>`;
+
+                // ★アコーディオン機能：ヘッダーをクリックしたら開閉を切り替える
+                const header = section.querySelector('.region-header-row');
+                header.onclick = () => {
+                    section.classList.toggle('collapsed');
+                };
+
+                // 店舗グリッドの作成
+                const subGrid = document.createElement('div');
+                subGrid.className = 'sub-grid';
+
+                // render関数の中の chip.onclick 部分を以下に差し替え
+                regionMalls.forEach(mall => {
+                    const isVisited = visitedIds.includes(mall.id);
+                    const chip = document.createElement('div');
+                    chip.className = `mall-chip ${isVisited ? 'visited' : ''}`;
+                    chip.innerText = mall.name;
+
+                    chip.onclick = (e) => {
+                        e.stopPropagation(); // アコーディオンが動くのを防ぐ
+                        // toggleVisitに「どのチップか(chip)」を教える
+                        toggleVisit(mall.id, chip);
+                    };
+
+                    subGrid.appendChild(chip);
+                });
+
+                section.appendChild(subGrid);
+                gridContainer.appendChild(section);
+            });
+
+            updateStats();
+        }
+
+        // 修正版：その場のチップと統計だけを更新する
+        function toggleVisit(id, element) {
+            if (visitedIds.includes(id)) {
+                visitedIds = visitedIds.filter(v => v !== id);
+                element.classList.remove('visited'); // 色を消す
+            } else {
+                visitedIds.push(id);
+                element.classList.add('visited'); // 色を塗る
+            }
+            localStorage.setItem('youme_data', JSON.stringify(visitedIds));
+
+            // 全体の円グラフと、各地方のバーだけを更新する
+            updateStats();
+            updateAllRegionBars();
+        }
+
+        // 地方ごとの進捗表示だけを更新する
+        function updateAllRegionBars() {
+            regionOrder.forEach(regionName => {
+                const regionMalls = malls.filter(m => m.region === regionName);
+                const visitedInRegion = regionMalls.filter(m => visitedIds.includes(m.id)).length;
+                const regionTotal = regionMalls.length;
+                const regionPercent = ((visitedInRegion / regionTotal) * 100).toFixed(2);
+
+                // 各地方のセクションを探して、中のバーとテキストを更新
+                const sections = document.querySelectorAll('.region-section');
+                sections.forEach(sec => {
+                    const title = sec.querySelector('.region-title-text');
+                    if (title && title.innerText.includes(regionName)) {
+                        const bar = sec.querySelector('.region-progress-fill');
+                        const stats = sec.querySelector('.region-stats-text');
+                        if (bar) bar.style.width = `${regionPercent}%`;
+                        if (stats) stats.innerHTML = `${regionPercent}% <small>(${visitedInRegion}/${regionTotal})</small>`;
+                    }
+                });
+            });
+        }
+
+        // 画像保存（captureArea全体を保存）
+        document.getElementById('saveBtn').onclick = function () {
+            html2canvas(document.getElementById('captureArea'), {
+                scale: 3,
+                backgroundColor: "#9f9f9f"
+            }).then(canvas => {
+                const link = document.createElement('a');
+                link.download = 'aeon-master-log.png';
+                link.href = canvas.toDataURL();
+                link.click();
+            });
+        };
+
+        render();
+    </script>
+
+</body>
+
+</html>
